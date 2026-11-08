@@ -79,23 +79,23 @@ jobs:
           echo "===按定义顺序拼接城市文件到zubo.txt==="
           > zubo.txt
           # 在这里自定义城市顺序，新增城市直接追加一行
-          城市列表=(
+          city_list=(
             "txt/Jiangxi_dianxin.txt"
-            #"txt/上海_电信.txt"
+            #"txt/Shanghai_dianxin.txt"
             #"txt/Guangzhou_dianxin.txt"
-          ）
+          )
 
           for f in "${city_list[@]}"; do
-            如果 [ -f "$f" ] 并且 [ -s "$f" ]；那么
+            if [ -f "$f" ] && [ -s "$f" ]; then
               cat "$f" >> zubo.txt
               echo "✅ 已拼接文件：$f"
-            否则
+            else
               echo "⏭️ 跳过空/不存在文件：$f"
             fi
-          完成
+          done
 
           #兜底，防止0字节空文件
-          如果 [ ! -s zubo.txt ]; then
+          if [ ! -s zubo.txt ]; then
             echo "# 暂无测速IP数据" > zubo.txt
           fi
           # ==================================================
@@ -103,14 +103,14 @@ jobs:
           NEW_ZUBO="./zubo.txt"
           
           # =====【第三步：校验新文件，空就回滚】=====
-          如果 [ -f "$NEW_ZUBO" ] 并且 [ -s "$NEW_ZUBO" ]；那么
+          if [ -f "$NEW_ZUBO" ] && [ -s "$NEW_ZUBO" ]; then
             echo "✅ 全局合并完成，zubo.txt生成成功"
-          如果 [ -f "$NEW_ZUBO" ] 并且 [ -s "$NEW_ZUBO" ]；那么
+          else
             echo "⚠️ 警告：新zubo.txt不存在或者是空！尝试恢复旧备份文件"
-
+            if [ -f "zubo_bf.txt" ] && [ -s "zubo_bf.txt" ]; then
               cp zubo_bf.txt zubo.txt
               echo "✅ 已恢复备份文件"
-            否则
+            else
               echo "ℹ️ 无有效旧备份，跳过恢复"
             fi
           fi
@@ -126,21 +126,21 @@ jobs:
           # 兜底页面，保证部署目录有静态文件
           echo "<pre>IPTV源：<a href='./zubo.m3u'>zubo.m3u</a></pre>" > index.html
           echo "✅ 生成index.html兜底页面"
-        环境:
+        env:
           ZUBO_PASSWORD: ${{ secrets.ZUBO_PASSWORD }}
 
       # ====================== ✅【Cloudflare Pages部署 wrangler-action@v4 官方新版】 ======================
-      - 名称: 部署到 Cloudflare Pages
-        使用: cloudflare/wrangler-action@v4
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v4
         continue-on-error: true
-        与:
+        with:
           apiToken: ${{ secrets.CF_API_TOKEN }}
           accountId: ${{ secrets.CF_ACCOUNT_ID }}
-          命令: pages deploy . --project-name=jxdx
+          command: pages deploy . --project-name=jxdx
 
-      # 文件校验恢复完成后，再执行git add
-      - 名称: 更新源（文件变更才提交，无变化直接跳过）
-        运行: |
+      # 文件校验恢复完成之后，再执行git add
+      - name: 更新源（文件变更才提交，无变化直接跳过）
+        run: |
           cd $GITHUB_WORKSPACE
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
@@ -148,17 +148,17 @@ jobs:
           git reset HEAD .
           
           # 提交：ip + logs
-          如果 [[ -n $(git status --porcelain ip/ logs/) ]]; then
+          if [[ -n $(git status --porcelain ip/ logs/) ]]; then
             echo "✅ 源文件检测到更新，准备提交"
             git add ip/
             git add logs/
             # 【重点：不git add zubo.m3u，明文不会保存到github仓库】
-            如果 [[ -n $(git status --porcelain) ]]; then
+            if [[ -n $(git status --porcelain) ]]; then
               git commit -m "🤖 GitHub Actions自动更新多城市源 ${{ github.run_id }}"
-              git 推送
-            否则
+              git push
+            else
               echo "✅ git无变更，跳过提交"
             fi
-          否则
+          else
             echo "ℹ️ 文件无更新，跳过git提交"
           fi
